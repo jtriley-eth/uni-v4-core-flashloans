@@ -18,23 +18,17 @@ contract PoolInitializer is ILockCallback {
     }
 
     function initialize(address token0, address token1) public {
+      IPoolManager.PoolKey memory key = IPoolManager.PoolKey({
+          currency0: Currency.wrap(address(token0)),
+          currency1: Currency.wrap(address(token1)),
+          fee: 0,
+          hooks: IHooks(address(0)),
+          tickSpacing: 60
+      });
         manager.initialize(
-            IPoolManager.PoolKey({
-                currency0: Currency.wrap(token0),
-                currency1: Currency.wrap(token1),
-                fee: 0,
-                hooks: IHooks(address(0)),
-                tickSpacing: 60
-            }),
+            key,
             TickMath.MIN_SQRT_RATIO
         );
-        IPoolManager.PoolKey memory key = IPoolManager.PoolKey({
-            currency0: Currency.wrap(address(token0)),
-            currency1: Currency.wrap(address(token1)),
-            fee: 0,
-            hooks: IHooks(address(0)),
-            tickSpacing: 60
-        });
 
         _modifyPosition(
             key,
