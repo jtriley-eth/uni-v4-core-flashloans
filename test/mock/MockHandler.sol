@@ -7,6 +7,8 @@ import {IERC20Minimal} from "lib/v4-core/contracts/interfaces/external/IERC20Min
 import {IHooks} from "lib/v4-core/contracts/interfaces/IHooks.sol";
 import {Currency} from "lib/v4-core/contracts/libraries/CurrencyLibrary.sol";
 import {TickMath} from "lib/v4-core/contracts/libraries/TickMath.sol";
+import {BalanceDelta} from "lib/v4-core/contracts/types/BalanceDelta.sol";
+import {MockERC20} from "test/mock/MockERC20.sol";
 
 contract MockHandler is ILockCallback {
 
@@ -21,11 +23,11 @@ contract MockHandler is ILockCallback {
     // ---------------------------------------------------------------------------------------------
     // Called by the user.
 
-    function initialize(address token) public {
+    function initialize(address token0, address token1) public {
         pool.initialize(
             IPoolManager.PoolKey({
-                currency0: Currency.wrap(address(0)),
-                currency1: Currency.wrap(token),
+                currency0: Currency.wrap(token0),
+                currency1: Currency.wrap(token1),
                 fee: 0,
                 hooks: IHooks(address(0)),
                 tickSpacing: 60
@@ -34,8 +36,8 @@ contract MockHandler is ILockCallback {
         );
     }
 
-    function initiateDonate(address token) public {
-        pool.lock(abi.encodeCall(this.donate, (token)));
+    function initiateModifyPosition(address token0, address token1) public {
+        pool.lock(abi.encodeCall(this.modifyPosition, (token0, token1)));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -50,18 +52,30 @@ contract MockHandler is ILockCallback {
     // ---------------------------------------------------------------------------------------------
     // Called by this contract.
 
-    function donate(address token) public {
-        Currency currency = Currency.wrap(token);
-        pool.donate(
+    function modifyPosition(address token0, address token1) public {
+        BalanceDelta delta = pool.modifyPosition(
             IPoolManager.PoolKey({
-                currency0: Currency.wrap(address(0)),
-                currency1: Currency.wrap(token),
+                currency0: Currency.wrap(token0),
+                currency1: Currency.wrap(token1),
                 fee: 0,
                 hooks: IHooks(address(0)),
                 tickSpacing: 60
             }),
-            0,
-            IERC20Minimal(token).balanceOf(address(this))
+            IPoolManager.ModifyPositionParams({
+                tickLower: 0,
+                tickUpper: 60,
+                liquidityDelta: 100
+            })
         );
+
+        if (delta.amount0() > 0) {
+            MockERC20(token0).mint(address(pool), uint256(int256(delta.amount0())));
+            pool.settle(Currency.wrap(token0));
+        }
+
+        if (delta.amount1() > 0) {
+            MockERC20(token1).mint(address(pool), uint256(int256(delta.amount1())));
+            pool.settle(Currency.wrap(token1));
+        }
     }
 }

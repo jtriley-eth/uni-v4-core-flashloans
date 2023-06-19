@@ -6,10 +6,11 @@ import {IPoolManager, PoolManager, IHooks} from "lib/v4-core/contracts/PoolManag
 import {Currency} from "lib/v4-core/contracts/libraries/CurrencyLibrary.sol";
 import {MockERC20} from "test/mock/MockERC20.sol";
 import {MockFlash} from "test/mock/MockFlash.sol";
-import {MockHandler, PoolInitializer} from "test/mock/MockHandler.sol";
-import {PoolModifyPositionTest} from "test/mock/PoolModifyPositionTest.sol";
+import {MockHandler} from "test/mock/MockHandler.sol";
 
 contract SimpleFlashTest is Test {
+    event HandledFlashloan(address token);
+
     PoolManager pool;
     MockERC20 token0;
     MockERC20 token1;
@@ -27,11 +28,13 @@ contract SimpleFlashTest is Test {
         flash = new MockFlash(pool);
         poolHandler = new MockHandler(pool);
 
-        PoolInitializer initializer = new PoolInitializer(pool);
-        initializer.initialize(address(token0), address(token1));
+        poolHandler.initialize(address(token0), address(token1));
+        poolHandler.initiateModifyPosition(address(token0), address(token1));
     }
 
     function testVibecheck() public {
+        vm.expectEmit(true, true, true, true, address(flash));
+        emit HandledFlashloan(address(token0));
         flash.initiate(address(token0));
     }
 }
