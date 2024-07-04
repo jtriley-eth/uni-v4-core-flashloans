@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0-only
-pragma solidity 0.8.20;
+pragma solidity 0.8.26;
 
-import {IPoolManager} from "lib/v4-core/contracts/interfaces/IPoolManager.sol";
-import {ILockCallback} from "lib/v4-core/contracts/interfaces/callback/ILockCallback.sol";
-import {IERC20Minimal} from "lib/v4-core/contracts/interfaces/external/IERC20Minimal.sol";
-import {IHooks} from "lib/v4-core/contracts/interfaces/IHooks.sol";
-import {Currency} from "lib/v4-core/contracts/libraries/CurrencyLibrary.sol";
-import {TickMath} from "lib/v4-core/contracts/libraries/TickMath.sol";
-import {BalanceDelta} from "lib/v4-core/contracts/types/BalanceDelta.sol";
+import {IPoolManager} from "lib/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "lib/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {IERC20Minimal} from "lib/v4-core/src/interfaces/external/IERC20Minimal.sol";
+import {IHooks} from "lib/v4-core/src/interfaces/IHooks.sol";
+import {Currency} from "lib/v4-core/src/libraries/CurrencyDelta.sol";
+import {TickMath} from "lib/v4-core/src/libraries/TickMath.sol";
+import {BalanceDelta} from "lib/v4-core/src/types/BalanceDelta.sol";
 import {MockERC20} from "test/mock/MockERC20.sol";
+import {PoolKey} from "lib/v4-core/src/types/PoolKey.sol";
+import {CurrencySettler} from "lib/v4-core/test/utils/CurrencySettler.sol";
 
-contract MockHandler is ILockCallback {
+contract MockHandler is IUnlockCallback {
+    using CurrencySettler for Currency;
 
     error FailedExecution(bytes retdata);
 
@@ -25,25 +28,26 @@ contract MockHandler is ILockCallback {
 
     function initialize(address token0, address token1) public {
         pool.initialize(
-            IPoolManager.PoolKey({
+            PoolKey({
                 currency0: Currency.wrap(token0),
                 currency1: Currency.wrap(token1),
                 fee: 0,
                 hooks: IHooks(address(0)),
                 tickSpacing: 60
             }),
-            TickMath.MIN_SQRT_RATIO
+            TickMath.MIN_SQRT_PRICE,
+            bytes("")
         );
     }
 
-    function initiateModifyPosition(address token0, address token1) public {
-        pool.lock(abi.encodeCall(this.modifyPosition, (token0, token1)));
+    function initiatemodifyLiquidity(address token0, address token1) public {
+        pool.unlock(abi.encodeCall(this.modifyLiquidity, (token0, token1)));
     }
 
     // ---------------------------------------------------------------------------------------------
     // Called by the pool.
 
-    function lockAcquired(uint256, bytes calldata data) public override returns (bytes memory) {
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
         (bool success, bytes memory retdata) = address(this).call(data);
         if (!success) revert FailedExecution(retdata);
         return retdata;
@@ -52,30 +56,33 @@ contract MockHandler is ILockCallback {
     // ---------------------------------------------------------------------------------------------
     // Called by this contract.
 
-    function modifyPosition(address token0, address token1) public {
-        BalanceDelta delta = pool.modifyPosition(
-            IPoolManager.PoolKey({
-                currency0: Currency.wrap(token0),
-                currency1: Currency.wrap(token1),
-                fee: 0,
-                hooks: IHooks(address(0)),
-                tickSpacing: 60
-            }),
-            IPoolManager.ModifyPositionParams({
+    function modifyLiquidity(address token0, address token1) public {
+        PoolKey memory key = PoolKey({
+            currency0: Currency.wrap(token0),
+            currency1: Currency.wrap(token1),
+            fee: 0,
+            hooks: IHooks(address(0)),
+            tickSpacing: 60
+        });
+        (BalanceDelta delta,  ) = pool.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
                 tickLower: 0,
                 tickUpper: 60,
-                liquidityDelta: 100
-            })
+                liquidityDelta: 100,
+                salt: bytes32(0)
+            }),
+            bytes("")
         );
 
-        if (delta.amount0() > 0) {
-            MockERC20(token0).mint(address(pool), uint256(int256(delta.amount0())));
-            pool.settle(Currency.wrap(token0));
+        if (delta.amount0() < 0) {
+            MockERC20(token0).mint(address(this), uint256(int256(-delta.amount0())));
+            key.currency0.settle(pool, address(this), uint256(int256(-delta.amount0())), false);
         }
 
-        if (delta.amount1() > 0) {
-            MockERC20(token1).mint(address(pool), uint256(int256(delta.amount1())));
-            pool.settle(Currency.wrap(token1));
+        if (delta.amount1() < 0) {
+            MockERC20(token1).mint(address(this), uint256(int256(-delta.amount1())));
+            key.currency1.settle(pool, address(this), uint256(int256(-delta.amount1())), false);
         }
     }
 }

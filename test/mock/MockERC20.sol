@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-pragma solidity 0.8.20;
+pragma solidity 0.8.26;
 
 contract MockERC20 {
     event Transfer(address indexed from, address indexed to, uint256 amount);
