@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "lib/forge-std/src/Test.sol";
-import {IPoolManager, PoolManager, IHooks} from "lib/v4-core/contracts/PoolManager.sol";
-import {Currency} from "lib/v4-core/contracts/libraries/CurrencyLibrary.sol";
+import {IPoolManager, PoolManager, IHooks} from "lib/v4-core/src/PoolManager.sol";
+import {Currency} from "lib/v4-core/src/libraries/CurrencyDelta.sol";
 import {MockERC20} from "test/mock/MockERC20.sol";
 import {MockFlash} from "test/mock/MockFlash.sol";
 import {MockHandler} from "test/mock/MockHandler.sol";
@@ -29,7 +29,7 @@ contract SimpleFlashTest is Test {
         poolHandler = new MockHandler(pool);
 
         poolHandler.initialize(address(token0), address(token1));
-        poolHandler.initiateModifyPosition(address(token0), address(token1));
+        poolHandler.initiatemodifyLiquidity(address(token0), address(token1));
     }
 
     function testVibecheck() public {
